@@ -1,1 +1,2 @@
 # Chess
+Geçerken alma eksik
