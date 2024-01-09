@@ -4,6 +4,10 @@ class ChessGameGUI:
     def __init__(self, master):
         self.master = master
         self.master.title("Chess")
+        self.sr = None
+        self.er = None
+        self.last_move = None
+        self.moves = []
         self.white_king_moved = False
         self.black_king_moved = False
         self.white_rook_moved = {'short': False, 'long': False}
@@ -20,7 +24,9 @@ class ChessGameGUI:
         ]
 
         self.current_player = 'white'
-
+        self.selected_piece = None
+        self.en_passant_target_row = -1
+        self.en_passant_target_col = -1
         # Sütun etiketleri (a - h)
         for col, col_label in enumerate(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']):
             tk.Label(master, text=col_label, width=4, height=2).grid(row=8, column=col)
@@ -61,7 +67,6 @@ class ChessGameGUI:
         self.selected_col = col
         print(f"Seçilen taş: {self.selected_piece}")
 
-
     def is_valid_move(self, start_row, start_col, end_row, end_col):
         # Burada taşın hareket kurallarını kontrol etme mantığı eklenmelidir
         # Bu örnek sadece taşların hareketini kontrol etmez, aynı zamanda taş yeme durumunu da kontrol eder
@@ -83,77 +88,139 @@ class ChessGameGUI:
     def valid_pawn_move(self, start_row, start_col, end_row, end_col):
         direction = 1 if self.selected_piece.islower() else -1
 
-        # İlk hamlede iki kare ileri hareket edebilme
-        if start_row == 1 and end_row == start_row + 2 * direction and start_col == end_col and self.board[start_row + direction][end_col] == ' ' and self.board[start_row + 2 * direction][end_col] == ' ':
+        # First move can be two squares forward
+        if start_row == (6 if direction == -1 else 1) and end_row == start_row + 2 * direction and start_col == end_col and self.board[start_row + direction][end_col] == ' ' and self.board[start_row + 2 * direction][end_col] == ' ':
             return True
 
-        # Diğer durumlarda bir kare ileri hareket etme
-        if end_row == start_row + direction and start_col == end_col and self.board[end_row][end_col] == ' ':
-            return True
+        # Other moves can only be one square forward
+        if start_col == end_col and self.board[end_row][end_col] == ' ':
+            if (direction == 1 and end_row == start_row + 1) or (direction == -1 and end_row == start_row - 1):
+                return True
 
-        # Çapraz hareketle yeme durumu
-        if end_col == start_col and self.board[end_row][end_col] != ' ':
-            return False
-
-        if abs(end_row - start_row) == 1 and abs(end_col - start_col) == 1:
+        # Diagonal capture
+        if abs(end_col - start_col) == 1 and end_row == start_row + direction:
             target_piece = self.board[end_row][end_col]
             if target_piece != ' ' and self.get_piece_color(target_piece) != self.current_player:
                 return True
 
-        # Geçerken alma durumu kontrolü
+        # Geçerken alma durumu
+        if abs(end_col - start_col) == 1 and end_row == start_row + 2 * direction:
+            target_piece = self.board[start_row + direction][end_col]
+            if target_piece != ' ' and self.get_piece_color(target_piece) != self.current_player:
+                return True
+
+
+
+        # En passant capture
+        if abs(end_col - start_col) == 1 and end_row == start_row + direction and self.board[end_row][end_col] == ' ' and self.en_passant_target_row == end_row and self.en_passant_target_col == end_col:
+            return True
+
         if self.valid_pawn_en_passant(start_row, start_col, end_row, end_col):
             return True
 
-        # İki kare ileri hareket edememe durumu
-        if start_row == 6 and end_row == start_row + 2 * direction and start_col == end_col and self.board[start_row + direction][end_col] == ' ' and self.board[start_row + 2 * direction][end_col] == ' ':
-            return True
+
+        if end_row == 0 or end_row == 7:
+            if self.selected_piece.lower() == 'p':
+                promotion_piece = self.choose_promotion_piece()
+                self.board[end_row][end_col] = promotion_piece
 
         return False
+
+    def choose_promotion_piece():
+
+        return 'Q'
+
 
     def valid_pawn_en_passant(self, start_row, start_col, end_row, end_col):
         direction = 1 if self.selected_piece.islower() else -1
 
-        # Geçerken alma durumu
+        # Check if pawn is moving in the correct direction
+        if direction == 1 and end_row <= start_row:
+            return False
+        if direction == -1 and end_row >= start_row:
+            return False
+
+        # Check if pawn is moving to the correct square for en passant capture
         if abs(end_row - start_row) == 1 and abs(end_col - start_col) == 1:
             target_row = start_row + direction
             target_col = end_col
             target_piece = self.board[target_row][target_col]
-
-            if target_piece == ' ' or self.get_piece_color(target_piece) == self.current_player:
-                return False
-
-            # Geçişken almanın gerçekleşip gerçekleşmediğini kontrol et
-            if target_piece.lower() == 'p' and target_row == (3 if direction == 1 else 4) and target_row == self.en_passant_target_row and target_col == self.en_passant_target_col:
-                print("Geçerken alındı!")
-                return True
-
-        return False
-
-
-
-
-
-    def make_move(self, start_row, start_col, end_row, end_col):
-        # Diğer hareket türlerini kontrol et...
-
-        # Geçerken alma durumu
-        if self.valid_pawn_en_passant(start_row, start_col, end_row, end_col):
-            self.board[start_row][end_col] = ' '  # Alınan piyonu sil
-            self.move_piece(start_row, start_col, end_row, end_col)  # Piyonu taşı
-            self.board[start_row][start_col] = ' '  # Başlangıç pozisyonunu boşalt
-            self.switch_player()  # Oyuncu değiştir
+            # Check if en passant capture is possible
+        if (
+            
+            target_row == (2 if self.current_player == 'white' else 5)
+            and self.board[target_row][target_col] == ' '  # Hedef kare boş olmalı
+            and self.board[target_row - direction][target_col] == ('p' if self.current_player=='white' else 'P' )  # Alınacak piyonun olduğu kare
+            and self.get_piece_color(self.board[target_row - direction][target_col]) != self.current_player  # Alınacak piyonun rengi farklı olmalı
+            and abs(target_col - start_col) == 1  # Hedef kare ile başlangıç karesi yanyana olmalı
+            and abs(self.last_move['start_row']-self.last_move['end_row'])==2
+        ):
+            self.board[target_row - direction][target_col]=' '
+            self.update_board()           
             return True
 
-        # Diğer durumları kontrol et...
-
         return False
 
+    def is_en_passant_valid(board, start_row, start_col, end_row, end_col):
+        # Beyaz piyonun iki kare ileriye hareket etmesi gerekir.
+        if end_row != start_row + 2:
+            return False
+
+        # Siyah piyonun iki kare ileriye hareket etmesi gerekir.
+        if board[end_row - 1][end_col] != "p":
+            return False
+
+        # Siyah piyonun iki kare ileriye hareket ettiği karenin yanındaki karede olması gerekir.
+        if board[end_row][end_col] != "p":
+            return False
+
+        return True
+
+    def make_move(self, start_square, end_square):
+        start_row, start_col = self.square_to_row_col(start_square)
+        end_row, end_col = self.square_to_row_col(end_square)
+
+        # Check if move is valid
+        if not self.valid_move(start_row, start_col, end_row, end_col):
+            return False
+
+        # Check for en passant capture
+        en_passant_capture = self.valid_pawn_en_passant(start_row, start_col, end_row, end_col)
+        if en_passant_capture:
+            captured_pawn_row = end_row - direction  # Hedef karenin bir gerisindeki piyonun satırı
+            captured_pawn_col = end_col  # Hedef karenin sütunu
+            self.board[captured_pawn_row][captured_pawn_col] = ' '
+
+        # Move piece
+        self.board[end_row][end_col] = self.selected_piece
+        self.board[start_row][start_col] = ' '
+        self.selected_piece = None
 
 
+
+        # Update move history
+        move = {
+            'piece': self.get_piece_type(self.board[end_row][end_col]),
+            'start_row': start_row,
+            'start_col': start_col,
+            'end_row': end_row,
+            'end_col': end_col,
+            'captured_piece': self.get_piece_type(self.board[captured_pawn_row][captured_pawn_col]) if en_passant_capture else None,
+            'en_passant': en_passant_capture,
+            'castle': self.valid_castle(start_row, start_col, end_row, end_col)
+        }
+        self.moves.append(move)
+
+
+
+
+        # Switch players
+        self.current_player = 'black' if self.current_player == 'white' else 'white'
+
+        return True
 
     def get_opponent_color(self, player_color):
         return 'white' if player_color == 'black' else 'black'
-
 
     def valid_rook_move(self, start_row, start_col, end_row, end_col):
         # Sadece yatay veya dikey hareket
@@ -209,7 +276,6 @@ class ChessGameGUI:
         # Hedef konum boşsa hareket edebilir
         return self.board[end_row][end_col] == ' '
 
-
     def valid_knight_move(self, start_row, start_col, end_row, end_col):
         # Şahin L şeklinde hareketi
         if (abs(start_row - end_row) == 2 and abs(start_col - end_col) == 1) or \
@@ -218,11 +284,9 @@ class ChessGameGUI:
             return self.board[end_row][end_col] == ' ' or self.get_piece_color(self.board[end_row][end_col]) != self.current_player
         return False
 
-
     def valid_queen_move(self, start_row, start_col, end_row, end_col):
         # Kraliçe, kale ve fil hareketini birleştirir
         return (self.valid_rook_move(start_row, start_col, end_row, end_col) or self.valid_bishop_move(start_row, start_col, end_row, end_col)) and self.is_path_clear(start_row, start_col, end_row, end_col)
-
 
     def valid_bishop_move(self, start_row, start_col, end_row, end_col):
         # Sadece çapraz hareket
@@ -230,7 +294,6 @@ class ChessGameGUI:
             # Hedef konumda sadece rakip taşı varsa yiyebilir
             return self.board[end_row][end_col] == ' ' or self.get_piece_color(self.board[end_row][end_col]) != self.current_player
         return False
-
 
     def is_path_clear(self, start_row, start_col, end_row, end_col):
         # Yatay hareket
@@ -260,14 +323,12 @@ class ChessGameGUI:
 
         return True
 
-
     def valid_king_move(self, start_row, start_col, end_row, end_col):
         # Şahın bir kare her yöne hareketi
         if abs(start_row - end_row) <= 1 and abs(start_col - end_col) <= 1 and self.is_path_clear(start_row, start_col, end_row, end_col):
             # Hedef konumda sadece rakip taşı varsa yiyebilir
             if self.board[end_row][end_col] == ' ' or self.get_piece_color(self.board[end_row][end_col]) != self.current_player:
                 return True
-
         # Kısa rok durumu
         if start_row == 7 and start_col == 4 and end_row == 7 and end_col == 6 and \
                 self.board[7][5] == ' ' and self.board[7][6] == ' ' and self.board[7][7] == 'R' and \
@@ -351,9 +412,16 @@ class ChessGameGUI:
         else:
             print("Geçersiz hamle!")
 
+        self.last_move = {
+            'piece': self.selected_piece,
+            'start_row': self.selected_row,
+            'start_col': self.selected_col,
+            'end_row': row,
+            'end_col': col
+        }        
+
         self.update_board()
         self.clear_selection()
-
 
     def switch_player(self):
         # Sıradaki oyuncuyu değiştir
